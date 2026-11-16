@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bili_player/bili_player.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -99,6 +100,21 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
     }
   }
 
+  /// One gesture, one video. A desktop wheel is a fine-grained scroll to
+  /// `PageView`, which strands it between two pages — the app then shows half
+  /// of the video and half of the cover. The desktop client steps by a whole
+  /// page per wheel notch and key press, so the pager takes no scrolling of its
+  /// own and every input here moves exactly one index.
+  void _step(int delta, int itemCount) {
+    final target = (_index + delta).clamp(0, itemCount - 1);
+    if (target == _index || !_controller.hasClients) return;
+    _controller.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(selectedFeedControllerProvider);
@@ -134,16 +150,31 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              PageView.builder(
-                key: const ValueKey('selected-feed-pager'),
-                controller: _controller,
-                scrollDirection: Axis.vertical,
-                itemCount: items.length,
-                onPageChanged: (index) => _onPageChanged(index, items.length),
-                itemBuilder: (context, index) => _SelectedCover(
-                  item: items[index],
-                  index: index,
-                  active: index == _index,
+              Listener(
+                onPointerSignal: (event) {
+                  if (event is! PointerScrollEvent) return;
+                  final dy = event.scrollDelta.dy;
+                  if (dy.abs() > 8) _step(dy > 0 ? 1 : -1, items.length);
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragEnd: (details) {
+                    final speed = details.primaryVelocity ?? 0;
+                    if (speed.abs() > 200) _step(speed < 0 ? 1 : -1, items.length);
+                  },
+                  child: PageView.builder(
+                    key: const ValueKey('selected-feed-pager'),
+                    controller: _controller,
+                    scrollDirection: Axis.vertical,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: items.length,
+                    onPageChanged: (index) => _onPageChanged(index, items.length),
+                    itemBuilder: (context, index) => _SelectedCover(
+                      item: items[index],
+                      index: index,
+                      active: index == _index,
+                    ),
+                  ),
                 ),
               ),
               _buildVideoLayer(height),
