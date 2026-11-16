@@ -108,7 +108,10 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
         backgroundColor: Colors.black,
         body: Stack(
           fit: StackFit.expand,
-          children: [_SelectedFeedStatus(state: state), _backButton()],
+          children: [
+            _SelectedFeedStatus(state: state),
+            _backButton(),
+          ],
         ),
       );
     }
@@ -186,10 +189,7 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
       child: VideoCompositionScope.of(context).compose(
         context,
         layers: [
-          VideoSurface(
-            key: const ValueKey('selected-surface'),
-            engine: engine,
-          ),
+          VideoSurface(key: const ValueKey('selected-surface'), engine: engine),
         ],
       ),
     );
