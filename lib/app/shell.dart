@@ -1726,7 +1726,6 @@ final class _BiliAppShellState extends State<BiliAppShell>
   Widget _bottomNavigation(BuildContext context) {
     final sections = [
       WorkspaceSection.home,
-      WorkspaceSection.selected,
       WorkspaceSection.dynamic,
       if (!_compactChannels) WorkspaceSection.live,
       WorkspaceSection.mine,
