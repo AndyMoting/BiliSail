@@ -160,8 +160,9 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
                   behavior: HitTestBehavior.opaque,
                   onVerticalDragEnd: (details) {
                     final speed = details.primaryVelocity ?? 0;
-                    if (speed.abs() > 200)
+                    if (speed.abs() > 200) {
                       _step(speed < 0 ? 1 : -1, items.length);
+                    }
                   },
                   child: PageView.builder(
                     key: const ValueKey('selected-feed-pager'),
