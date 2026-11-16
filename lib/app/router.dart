@@ -198,6 +198,7 @@ GoRouter createBiliRouter({
       routes: [
         for (final path in [
           '/',
+          '/selected',
           '/search',
           '/video/:bvid',
           '/pgc/season/:id',
