@@ -16,13 +16,14 @@ class _Revision extends Notifier<int> {
 void main() {
   final locations = {
     WorkspaceRootSection.feed: Uri.parse('/?channel=popular&section=每周必看'),
+    WorkspaceRootSection.selected: Uri.parse('/selected'),
     WorkspaceRootSection.account: Uri.parse('/me?section=favorites'),
     WorkspaceRootSection.messages: Uri.parse('/messages?talker=2'),
     WorkspaceRootSection.downloads: Uri.parse('/downloads'),
     WorkspaceRootSection.settings: Uri.parse('/settings?section=playback'),
   };
   for (final initial in WorkspaceRootSection.values) {
-    testWidgets('root lazily retains five branches when starting at $initial', (
+    testWidgets('root lazily retains six branches when starting at $initial', (
       tester,
     ) async {
       final selection = ValueNotifier(locations[initial]!);
@@ -98,8 +99,8 @@ void main() {
           expect(entry.value.widget.uri, locations[entry.key]);
         }
       }
-      expect(find.byType(_Probe, skipOffstage: false), findsNWidgets(5));
-      expect(buckets.values.toSet(), hasLength(5));
+      expect(find.byType(_Probe, skipOffstage: false), findsNWidgets(6));
+      expect(buckets.values.toSet(), hasLength(6));
       visible.value = false;
       await tester.pump();
       for (final state in states.values) {
