@@ -63,9 +63,13 @@ class SelectedFeedController extends Notifier<SelectedFeedState> {
     return const SelectedFeedState(loading: true);
   }
 
+  /// Promotion does not cross the two unrelated repository interfaces, so the
+  /// capability is narrowed with an explicit cast instead of a `return`.
   SelectedFeedRepository? get _repository {
     final repository = ref.read(feedRepositoryProvider);
-    if (repository is SelectedFeedRepository) return repository;
+    if (repository is SelectedFeedRepository) {
+      return repository as SelectedFeedRepository;
+    }
     return null;
   }
 
