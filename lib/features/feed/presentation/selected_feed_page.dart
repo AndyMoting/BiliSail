@@ -174,16 +174,25 @@ class _SelectedFeedCard extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           ColoredBox(color: Colors.black),
-          if (cover != null)
+          if (cover != null && playing == null)
             Image.network(
               cover,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stack) => const SizedBox.shrink(),
             ),
           if (playing != null)
-            VideoSurface(
-              key: ValueKey('selected-surface-$index'),
-              engine: playing,
+            // The engine renders into a native texture; without the composition
+            // adapter the surface stays invisible even though audio plays.
+            Positioned.fill(
+              child: VideoCompositionScope.of(context).compose(
+                context,
+                layers: [
+                  VideoSurface(
+                    key: ValueKey('selected-surface-$index'),
+                    engine: playing,
+                  ),
+                ],
+              ),
             ),
           const DecoratedBox(
             decoration: BoxDecoration(
