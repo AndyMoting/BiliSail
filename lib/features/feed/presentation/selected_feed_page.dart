@@ -271,9 +271,7 @@ class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
     if (controller == null) return;
     // The page autoplays on load; neighbours must not keep decoding audio once
     // the user has moved on, so playback is re-asserted on every activation.
-    await controller.runJavaScript(
-      widget.active ? _kPlay : _kPause,
-    );
+    await controller.runJavaScript(widget.active ? _kPlay : _kPause);
   }
 
   @override
