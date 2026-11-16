@@ -1,15 +1,20 @@
+import 'package:bili_player/bili_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../domain/video.dart';
+import '../../playback/application/playback_session.dart';
+import '../../video/application/video_controller.dart';
 import '../application/selected_feed_controller.dart';
 
 /// Full-screen vertical "精选" flow.
 ///
 /// Mirrors the desktop client: one video per screen, ten per request, and the
 /// next page is requested while the user is still on the second to last item so
-/// the swipe never lands on a loading card.
+/// the swipe never lands on a loading card. The visible tab owns one playback
+/// session, so only the centered item is opened; neighbours stay on their cover
+/// and take over the same session once they reach the center.
 class SelectedFeedPage extends ConsumerStatefulWidget {
   const SelectedFeedPage({super.key});
 
@@ -21,27 +26,76 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
   final _controller = PageController();
   int _index = 0;
 
+  /// Guards against a slow detail request reviving a page the user left.
+  int _activation = 0;
+  bool _activating = false;
+
+  /// The item currently loading or playing behind the centered page.
+  String? _playingId;
+  PlaybackSession? _session;
+
   @override
   void dispose() {
+    _activation++;
     _controller.dispose();
     super.dispose();
   }
 
-  void _onPageChanged(int index, int itemCount) {
-    setState(() => _index = index);
-    if (index >= itemCount - 2) {
-      ref.read(selectedFeedControllerProvider.notifier).loadMore();
+  PlaybackSession? _resolveSession() {
+    if (_session != null) return _session;
+    if (!ref.exists(playbackSessionProvider)) return null;
+    return _session = ref.read(playbackSessionProvider);
+  }
+
+  /// Opens the already resolved detail on the tab's single session.
+  Future<void> _open(VideoSummary item, VideoDetail detail) async {
+    if (_playingId == item.id.value) return;
+    final session = _resolveSession();
+    if (session == null || _activating) return;
+    _activating = true;
+    final activation = ++_activation;
+    try {
+      await session.open(
+        detail,
+        detail.parts.isEmpty ? null : detail.parts.first,
+        desiredPlaying: true,
+      );
+      if (!mounted || activation != _activation) return;
+      setState(() => _playingId = item.id.value);
+    } on Object {
+      if (!mounted || activation != _activation) return;
+      setState(() => _playingId = null);
+    } finally {
+      _activating = false;
     }
   }
 
-  void _open(VideoSummary item) {
-    context.go('/video/${item.id.value}');
+  void _onPageChanged(int index, int itemCount, List<VideoSummary> items) {
+    setState(() => _index = index);
+    // The centered page takes the session over; the previous one immediately
+    // falls back to its cover, matching the desktop handoff.
+    if (index >= itemCount - 2) {
+      ref.read(selectedFeedControllerProvider.notifier).loadMore();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(selectedFeedControllerProvider);
     final items = state.items;
+    if (items.isNotEmpty) {
+      final centered = items[_index.clamp(0, items.length - 1)];
+      // Watching keeps the auto-dispose detail alive while this page is
+      // centered; opening from a post-frame callback avoids mutating playback
+      // during build.
+      final detail = ref.watch(videoDetailProvider(centered.id)).value;
+      if (detail != null && _playingId != centered.id.value) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _open(centered, detail);
+        });
+      }
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -55,13 +109,19 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
               controller: _controller,
               scrollDirection: Axis.vertical,
               itemCount: items.length,
-              onPageChanged: (index) => _onPageChanged(index, items.length),
-              itemBuilder: (context, index) => _SelectedFeedCard(
-                item: items[index],
-                index: index,
-                active: index == _index,
-                onOpen: () => _open(items[index]),
-              ),
+              onPageChanged: (index) =>
+                  _onPageChanged(index, items.length, items),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final playing = index == _index && _playingId == item.id.value;
+                return _SelectedFeedCard(
+                  item: item,
+                  index: index,
+                  active: index == _index,
+                  engine: playing ? _session?.engine : null,
+                  onOpen: () => context.go('/video/${item.id.value}'),
+                );
+              },
             ),
           Positioned(
             top: 12,
@@ -92,17 +152,22 @@ class _SelectedFeedCard extends StatelessWidget {
     required this.index,
     required this.active,
     required this.onOpen,
+    this.engine,
   });
 
   final VideoSummary item;
   final int index;
   final bool active;
+
+  /// Present only for the centered item whose media is already open.
+  final PlayerEngine? engine;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     final rawCover = '${item.coverUrl}';
     final cover = rawCover == 'null' || rawCover.isEmpty ? null : rawCover;
+    final playing = engine;
     return GestureDetector(
       key: ValueKey('selected-feed-item-$index'),
       onTap: onOpen,
@@ -116,6 +181,8 @@ class _SelectedFeedCard extends StatelessWidget {
               fit: BoxFit.contain,
               errorBuilder: (context, error, stack) => const SizedBox.shrink(),
             ),
+          if (playing != null)
+            VideoSurface(key: ValueKey('selected-surface-$index'), engine: playing),
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -169,7 +236,7 @@ class _SelectedFeedCard extends StatelessWidget {
                           size: 16,
                         ),
                         Text(
-                          '$_formatCount $count',
+                          _formatCount(count),
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
