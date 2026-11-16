@@ -181,7 +181,10 @@ class _SelectedFeedCard extends StatelessWidget {
               errorBuilder: (context, error, stack) => const SizedBox.shrink(),
             ),
           if (playing != null)
-            VideoSurface(key: ValueKey('selected-surface-$index'), engine: playing),
+            VideoSurface(
+              key: ValueKey('selected-surface-$index'),
+              engine: playing,
+            ),
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
