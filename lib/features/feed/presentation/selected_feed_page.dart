@@ -160,7 +160,8 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
                   behavior: HitTestBehavior.opaque,
                   onVerticalDragEnd: (details) {
                     final speed = details.primaryVelocity ?? 0;
-                    if (speed.abs() > 200) _step(speed < 0 ? 1 : -1, items.length);
+                    if (speed.abs() > 200)
+                      _step(speed < 0 ? 1 : -1, items.length);
                   },
                   child: PageView.builder(
                     key: const ValueKey('selected-feed-pager'),
@@ -168,7 +169,8 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
                     scrollDirection: Axis.vertical,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: items.length,
-                    onPageChanged: (index) => _onPageChanged(index, items.length),
+                    onPageChanged: (index) =>
+                        _onPageChanged(index, items.length),
                     itemBuilder: (context, index) => _SelectedCover(
                       item: items[index],
                       index: index,
