@@ -24,15 +24,22 @@ final class WorkspaceTab {
       location.pathSegments.length == 2 &&
       location.pathSegments.first == 'topic';
   bool get isBrowse => location.path == '/';
+  bool get isSelected => location.path == '/selected';
   bool get isAccount => location.path == '/me';
   bool get isMessages => location.path == '/messages';
   bool get isDownloads => location.path == '/downloads';
   bool get isSettings => location.path == '/settings';
   bool get isRoot =>
-      isBrowse || isAccount || isMessages || isDownloads || isSettings;
+      isBrowse ||
+      isSelected ||
+      isAccount ||
+      isMessages ||
+      isDownloads ||
+      isSettings;
 
   String get title {
     if (isBrowse) return pinned ? '首页' : '浏览';
+    if (isSelected) return '精选';
     if (location.path == '/search') {
       final query = location.queryParameters['q'] ?? '';
       return query.isEmpty ? '搜索' : '搜索：$query';
