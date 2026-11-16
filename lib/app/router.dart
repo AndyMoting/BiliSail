@@ -654,9 +654,8 @@ final class _WorkspacePage extends ConsumerWidget {
       final id = VideoId(tab.location.pathSegments.last);
       final title = id.isValid
           ? ref.watch(
-              videoDetailProvider(
-                id,
-              ).select((detail) => detail.value?.summary.title),
+              videoDetailProvider(id)
+                  .select((detail) => detail.value?.summary.title),
             )
           : null;
       if (title != null) {

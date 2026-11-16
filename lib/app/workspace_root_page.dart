@@ -20,8 +20,10 @@ enum WorkspaceRootSection {
   );
 }
 
-typedef WorkspaceRootBuilder =
-    Widget Function(BuildContext context, Uri location);
+typedef WorkspaceRootBuilder = Widget Function(
+  BuildContext context,
+  Uri location,
+);
 
 /// Primary navigation changes selection while each visited root keeps its tree.
 class WorkspaceRootPage extends StatefulWidget {

@@ -38,23 +38,27 @@ import '../shared/ui/page_toolbar.dart';
 import '../shared/ui/retained_tab_view.dart';
 import '../shared/ui/scroll_collapsing_header.dart';
 
-typedef WorkspacePageBuilder =
-    Widget Function(BuildContext context, WorkspaceTab tab);
-typedef WorkspacePageScopeBuilder =
-    Widget Function(BuildContext context, WorkspaceTab tab, Widget child);
+typedef WorkspacePageBuilder = Widget Function(
+  BuildContext context,
+  WorkspaceTab tab,
+);
+typedef WorkspacePageScopeBuilder = Widget Function(
+  BuildContext context,
+  WorkspaceTab tab,
+  Widget child,
+);
 typedef DragRegionBuilder = Widget Function(BuildContext context, Widget child);
-typedef WorkspaceWindowBuilder =
-    Widget Function(
-      BuildContext context, {
-      required Widget child,
-      required Widget? playback,
-      required bool keepPlaybackMounted,
-      required Object? activationToken,
-      required VoidCallback onClose,
-      required VoidCallback onBack,
-      required VoidCallback onHome,
-      required ValueChanged<Object> onError,
-    });
+typedef WorkspaceWindowBuilder = Widget Function(
+  BuildContext context, {
+  required Widget child,
+  required Widget? playback,
+  required bool keepPlaybackMounted,
+  required Object? activationToken,
+  required VoidCallback onClose,
+  required VoidCallback onBack,
+  required VoidCallback onHome,
+  required ValueChanged<Object> onError,
+});
 
 /// A visible browser must not take playback ownership from its sibling window.
 class WorkspacePlaybackSelection extends InheritedWidget {
@@ -289,9 +293,8 @@ final class _BiliAppShellState extends State<BiliAppShell>
       compact: _compactChannels,
     );
     final index = settings
-        ? SettingsCategory.fromName(
-            tab.location.queryParameters['section'],
-          ).index
+        ? SettingsCategory.fromName(tab.location.queryParameters['section'])
+              .index
         : channels
               .indexWhere(
                 (channel) =>
@@ -1553,9 +1556,10 @@ final class _BiliAppShellState extends State<BiliAppShell>
                               height: 17 / 12,
                               color: selected
                                   ? colors.primary
-                                  : Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall?.color,
+                                  : Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.color,
                             ),
                           ),
                         ],
