@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:webview_all/webview_all.dart';
 
+import '../../../core/presentation/app_input_host.dart';
 import '../../../domain/video.dart';
 import '../application/selected_feed_controller.dart';
 
@@ -237,6 +238,9 @@ class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
       final controller = session.controller;
       _controller = controller;
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      // The page is opened by the app, so its media must start without a tap.
+      await controller.setMediaPlaybackRequiresUserGesture(false);
+      await controller.setBackgroundColor(Colors.black);
       await controller.setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
@@ -258,7 +262,7 @@ class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
   Future<void> _decorate() async {
     final controller = _controller;
     if (controller == null) return;
-    await controller.evaluateJavascript(source: _kShrinkToPlayer);
+    await controller.runJavaScript(_kShrinkToPlayer);
     await _syncPlayback();
   }
 
@@ -267,8 +271,8 @@ class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
     if (controller == null) return;
     // The page autoplays on load; neighbours must not keep decoding audio once
     // the user has moved on, so playback is re-asserted on every activation.
-    await controller.evaluateJavascript(
-      source: widget.active ? _kPlay : _kPause,
+    await controller.runJavaScript(
+      widget.active ? _kPlay : _kPause,
     );
   }
 
