@@ -65,7 +65,8 @@ class SelectedFeedController extends Notifier<SelectedFeedState> {
 
   SelectedFeedRepository? get _repository {
     final repository = ref.read(feedRepositoryProvider);
-    return repository is SelectedFeedRepository ? repository : null;
+    if (repository is SelectedFeedRepository) return repository;
+    return null;
   }
 
   Future<void> refresh() async {

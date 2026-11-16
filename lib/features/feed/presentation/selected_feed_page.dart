@@ -165,8 +165,7 @@ class _SelectedFeedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rawCover = '${item.coverUrl}';
-    final cover = rawCover == 'null' || rawCover.isEmpty ? null : rawCover;
+    final cover = item.coverUrl.isEmpty ? null : item.coverUrl;
     final playing = engine;
     return GestureDetector(
       key: ValueKey('selected-feed-item-$index'),
@@ -249,7 +248,7 @@ class _SelectedFeedCard extends StatelessWidget {
                       ],
                     ],
                   ),
-                  if (item.rcmdReason case final reason?
+                  if (item.recommendationReason case final reason?
                       when reason.trim().isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Container(

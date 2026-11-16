@@ -45,6 +45,8 @@ void main() {
                 valueListenable: selection,
                 builder: (context, location, _) => WorkspaceRootPage(
                   location: location,
+                  selectedBuilder: (_, uri) =>
+                      probe(WorkspaceRootSection.selected, uri),
                   feedBuilder: (_, uri) =>
                       probe(WorkspaceRootSection.feed, uri),
                   accountBuilder: (_, uri) =>
@@ -117,6 +119,7 @@ void main() {
             valueListenable: location,
             builder: (context, uri, _) => WorkspaceRootPage(
               location: uri,
+              selectedBuilder: (_, _) => const SizedBox(),
               feedBuilder: (_, _) => Consumer(
                 builder: (_, ref, _) =>
                     Text('account epoch ${ref.watch(_revision)}'),
