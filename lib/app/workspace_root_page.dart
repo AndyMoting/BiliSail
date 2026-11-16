@@ -5,6 +5,7 @@ import '../shared/ui/retained_page_layout.dart';
 
 enum WorkspaceRootSection {
   feed('/'),
+  selected('/selected'),
   account('/me'),
   messages('/messages'),
   downloads('/downloads'),
@@ -19,10 +20,8 @@ enum WorkspaceRootSection {
   );
 }
 
-typedef WorkspaceRootBuilder = Widget Function(
-  BuildContext context,
-  Uri location,
-);
+typedef WorkspaceRootBuilder =
+    Widget Function(BuildContext context, Uri location);
 
 /// Primary navigation changes selection while each visited root keeps its tree.
 class WorkspaceRootPage extends StatefulWidget {
@@ -30,6 +29,7 @@ class WorkspaceRootPage extends StatefulWidget {
     super.key,
     required this.location,
     required this.feedBuilder,
+    required this.selectedBuilder,
     required this.accountBuilder,
     required this.messagesBuilder,
     required this.downloadsBuilder,
@@ -38,6 +38,7 @@ class WorkspaceRootPage extends StatefulWidget {
 
   final Uri location;
   final WorkspaceRootBuilder feedBuilder;
+  final WorkspaceRootBuilder selectedBuilder;
   final WorkspaceRootBuilder accountBuilder;
   final WorkspaceRootBuilder messagesBuilder;
   final WorkspaceRootBuilder downloadsBuilder;
@@ -60,6 +61,7 @@ class _WorkspaceRootPageState extends State<WorkspaceRootPage> {
     Uri location,
   ) => switch (section) {
     WorkspaceRootSection.feed => widget.feedBuilder(context, location),
+    WorkspaceRootSection.selected => widget.selectedBuilder(context, location),
     WorkspaceRootSection.account => widget.accountBuilder(context, location),
     WorkspaceRootSection.messages => widget.messagesBuilder(context, location),
     WorkspaceRootSection.downloads => widget.downloadsBuilder(

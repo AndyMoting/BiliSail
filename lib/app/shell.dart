@@ -38,27 +38,23 @@ import '../shared/ui/page_toolbar.dart';
 import '../shared/ui/retained_tab_view.dart';
 import '../shared/ui/scroll_collapsing_header.dart';
 
-typedef WorkspacePageBuilder = Widget Function(
-  BuildContext context,
-  WorkspaceTab tab,
-);
-typedef WorkspacePageScopeBuilder = Widget Function(
-  BuildContext context,
-  WorkspaceTab tab,
-  Widget child,
-);
+typedef WorkspacePageBuilder =
+    Widget Function(BuildContext context, WorkspaceTab tab);
+typedef WorkspacePageScopeBuilder =
+    Widget Function(BuildContext context, WorkspaceTab tab, Widget child);
 typedef DragRegionBuilder = Widget Function(BuildContext context, Widget child);
-typedef WorkspaceWindowBuilder = Widget Function(
-  BuildContext context, {
-  required Widget child,
-  required Widget? playback,
-  required bool keepPlaybackMounted,
-  required Object? activationToken,
-  required VoidCallback onClose,
-  required VoidCallback onBack,
-  required VoidCallback onHome,
-  required ValueChanged<Object> onError,
-});
+typedef WorkspaceWindowBuilder =
+    Widget Function(
+      BuildContext context, {
+      required Widget child,
+      required Widget? playback,
+      required bool keepPlaybackMounted,
+      required Object? activationToken,
+      required VoidCallback onClose,
+      required VoidCallback onBack,
+      required VoidCallback onHome,
+      required ValueChanged<Object> onError,
+    });
 
 /// A visible browser must not take playback ownership from its sibling window.
 class WorkspacePlaybackSelection extends InheritedWidget {
@@ -293,8 +289,9 @@ final class _BiliAppShellState extends State<BiliAppShell>
       compact: _compactChannels,
     );
     final index = settings
-        ? SettingsCategory.fromName(tab.location.queryParameters['section'])
-              .index
+        ? SettingsCategory.fromName(
+            tab.location.queryParameters['section'],
+          ).index
         : channels
               .indexWhere(
                 (channel) =>
@@ -1279,6 +1276,8 @@ final class _BiliAppShellState extends State<BiliAppShell>
               ? previous
               : channels.first,
         );
+      case WorkspaceSection.selected:
+        context.go('/selected');
       case WorkspaceSection.dynamic:
         _selectChannel(
           _lastChannels[section] ??
@@ -1309,6 +1308,10 @@ final class _BiliAppShellState extends State<BiliAppShell>
       switch (section) {
         WorkspaceSection.home =>
           selected ? Icons.home_rounded : Icons.home_outlined,
+        WorkspaceSection.selected =>
+          selected
+              ? Icons.play_circle_rounded
+              : Icons.play_circle_outline_rounded,
         WorkspaceSection.dynamic => Icons.rss_feed_rounded,
         WorkspaceSection.live =>
           selected ? Icons.live_tv_rounded : Icons.live_tv_outlined,
@@ -1550,10 +1553,9 @@ final class _BiliAppShellState extends State<BiliAppShell>
                               height: 17 / 12,
                               color: selected
                                   ? colors.primary
-                                  : Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.color,
+                                  : Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.color,
                             ),
                           ),
                         ],
@@ -1604,6 +1606,7 @@ final class _BiliAppShellState extends State<BiliAppShell>
                   ),
                   for (final item in [
                     WorkspaceSection.home,
+                    WorkspaceSection.selected,
                     WorkspaceSection.dynamic,
                     if (!_compactChannels) WorkspaceSection.live,
                     WorkspaceSection.mine,
@@ -1719,6 +1722,7 @@ final class _BiliAppShellState extends State<BiliAppShell>
   Widget _bottomNavigation(BuildContext context) {
     final sections = [
       WorkspaceSection.home,
+      WorkspaceSection.selected,
       WorkspaceSection.dynamic,
       if (!_compactChannels) WorkspaceSection.live,
       WorkspaceSection.mine,
@@ -2038,6 +2042,7 @@ final class _BiliAppShellState extends State<BiliAppShell>
             WorkspaceSection.dynamic =>
       _sectionIcon(WorkspaceSection.dynamic),
     '/me' => _sectionIcon(WorkspaceSection.mine),
+    '/selected' => _sectionIcon(WorkspaceSection.selected),
     '/messages' => _sectionIcon(WorkspaceSection.messages),
     '/downloads' => _sectionIcon(WorkspaceSection.downloads),
     '/search' => BiliIcons.search,

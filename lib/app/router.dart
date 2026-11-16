@@ -51,6 +51,7 @@ import '../features/feed/application/feed_controller.dart';
 import '../features/feed/application/home_controller.dart';
 import '../features/feed/domain/home_channel.dart';
 import '../features/feed/presentation/feed_screen.dart';
+import '../features/feed/presentation/selected_feed_page.dart';
 import '../features/library/presentation/history_screen.dart';
 import '../features/search/application/search_controller.dart';
 import '../features/search/presentation/search_screen.dart';
@@ -355,6 +356,11 @@ final class _WorkspacePage extends ConsumerWidget {
 
   Widget _rootPage(BuildContext context, bool signedIn) => WorkspaceRootPage(
     location: tab.location,
+    selectedBuilder: (context, location) => _rootBranch(
+      section: WorkspaceRootSection.selected,
+      location: location,
+      builder: (context) => const SelectedFeedPage(),
+    ),
     feedBuilder: (context, location) => _rootBranch(
       section: WorkspaceRootSection.feed,
       location: location,
@@ -648,8 +654,9 @@ final class _WorkspacePage extends ConsumerWidget {
       final id = VideoId(tab.location.pathSegments.last);
       final title = id.isValid
           ? ref.watch(
-              videoDetailProvider(id)
-                  .select((detail) => detail.value?.summary.title),
+              videoDetailProvider(
+                id,
+              ).select((detail) => detail.value?.summary.title),
             )
           : null;
       if (title != null) {
