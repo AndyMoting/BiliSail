@@ -61,9 +61,10 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
                 item: items[index],
                 index: index,
                 active: index == _index,
-                // Neighbouring players stay mounted so a swipe lands on a page
-                // that is already loading instead of a cold WebView.
-                attached: (index - _index).abs() <= 1,
+                // Windows hosts a WebView as a native child window, so two
+                // mounted players would stack on screen instead of being
+                // clipped by the pager. Only the centred page owns one.
+                attached: index == _index,
               ),
             ),
           Positioned(
@@ -249,7 +250,15 @@ class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
         ),
       );
       await controller.loadRequest(
-        Uri.parse('https://www.bilibili.com/video/${widget.bvid}/'),
+        // The bare player document: no home shell, no sidebar and no feed, so
+        // it paints in about a second instead of rendering a whole page and
+        // then being cropped. It is same-origin with the API, which keeps the
+        // <video> element reachable from runJavaScript.
+        Uri.parse(
+          'https://www.bilibili.com/blackboard/html5mobileplayer.html'
+          '?bvid=${widget.bvid}&autoplay=1&danmaku=1'
+          '&high_quality=1&as_wide=1',
+        ),
       );
       if (_disposed) return;
       if (mounted) setState(() {});
@@ -307,14 +316,11 @@ const _kShrinkToPlayer = '''
   var style = document.createElement('style');
   style.id = id;
   style.textContent = [
-    'html,body{overflow:hidden!important;background:#000!important}',
-    'body *{visibility:hidden!important}',
-    '#bilibili-player,#bilibili-player *{visibility:visible!important}',
+    'html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important}',
     '#bilibili-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;margin:0!important;z-index:2147483646!important}',
-    '#bilibili-player .bpx-player-container,#bilibili-player .bpx-player-primary-area{width:100%!important;height:100%!important}',
+    '#bilibili-player .bpx-player-container,#bilibili-player .bpx-player-primary-area,.bpx-player-video-area{width:100vw!important;height:100vh!important}',
     '#bilibili-player .bpx-player-container{box-shadow:none!important}',
-    '#bilibili-player .bpx-player-video-area{height:100%!important}',
-    '.bpx-player-ending-panel,.bpx-player-ending-wrap,.bpx-player-toast-auto{display:none!important}'
+    'video{object-fit:contain!important;background:#000!important}'
   ].join('');
   document.head.appendChild(style);
 })();
