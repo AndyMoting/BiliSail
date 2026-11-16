@@ -24,6 +24,7 @@ class ApiFeedRepository
         RecommendationPublicationTimeRepository,
         AppRecommendationFeedRepository,
         DesktopRecommendationFeedRepository,
+        SelectedFeedRepository,
         RecommendationFeedbackRepository {
   ApiFeedRepository(this.api, this.requests, {this.appIdentity});
   final AppRecommendationIdentityStore? appIdentity;
@@ -37,6 +38,11 @@ class ApiFeedRepository
   final _desktopRecommendationPulls = Expando<_RecommendationPull>();
   int _desktopRecommendationIndex = 0;
   int? _desktopRecommendationEpoch;
+  // The selected flow keeps its own sample index; sharing the desktop index
+  // would make both feeds skip pages whenever the user switches between them.
+  final _selectedPulls = Expando<_RecommendationPull>();
+  int _selectedIndex = 0;
+  int? _selectedEpoch;
 
   @override
   String get feedbackScope => 'session:${requests.sessionEpoch}';
@@ -403,6 +409,43 @@ class ApiFeedRepository
     ),
     cancellation: cancellation,
   );
+
+  @override
+  Future<PageResult<VideoSummary>> loadSelectedFeed({
+    required int page,
+    required RequestCancellation cancellation,
+  }) => requests.run((context) async {
+    if (page < 1) throw ArgumentError.value(page, 'page');
+    final epoch = requests.sessionEpoch;
+    if (_selectedEpoch != epoch) {
+      _selectedEpoch = epoch;
+      _selectedIndex = 0;
+    }
+    final pulls = _selectedPulls;
+    final pending = pulls[cancellation];
+    final pull =
+        pending != null && pending.page == page && pending.epoch == epoch
+        ? pending
+        // The selected profile numbers its first request 1, not 0 like the
+        // desktop grid, so the shared counter is pre-incremented.
+        : _RecommendationPull(page, ++_selectedIndex, epoch);
+    pulls[cancellation] = pull;
+    final result = _mapPage(
+      await api.getSelectedFeed(
+        freshIndex: pull.index,
+        loadMore: page > 1,
+        context: context,
+      ),
+    );
+    // A late response from a previous page or account session must not clear
+    // the retry index owned by the current one.
+    if (!cancellation.isCancelled &&
+        epoch == requests.sessionEpoch &&
+        identical(pulls[cancellation], pull)) {
+      pulls[cancellation] = null;
+    }
+    return result;
+  }, cancellation: cancellation);
 
   Future<PageResult<VideoSummary>> _loadRecommendations({
     required int page,

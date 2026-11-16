@@ -84,6 +84,16 @@ abstract interface class DesktopRecommendationFeedRepository {
   });
 }
 
+/// The desktop client's "精选" page: a full-screen vertical flow rather than a
+/// grid. It pages independently from [DesktopRecommendationFeedRepository] so
+/// the two never consume each other's sample index.
+abstract interface class SelectedFeedRepository {
+  Future<PageResult<VideoSummary>> loadSelectedFeed({
+    required int page,
+    required RequestCancellation cancellation,
+  });
+}
+
 /// Optional metadata for recommendation sources that omit publication times.
 abstract interface class RecommendationPublicationTimeRepository {
   Future<DateTime?> loadPublicationTime(

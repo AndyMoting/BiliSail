@@ -2012,6 +2012,36 @@ final class BiliApiClient {
     return _recommendedPage(data, freshIndex + 1);
   }
 
+  /// The desktop client's full-screen "精选" flow. It shares the rcmd endpoint
+  /// with the home grid but selects `feed_version=CLIENT_SELECTED`, which the
+  /// server answers with a short mixed feed meant for one-video-per-screen
+  /// vertical paging. Unlike the grid profile it ignores `x_num`/`y_num` and
+  /// keeps ten items per page.
+  Future<ApiPage<ApiVideoSummary>> getSelectedFeed({
+    required int freshIndex,
+    bool loadMore = false,
+    ApiRequestContext? context,
+  }) async {
+    if (freshIndex < 1) throw ArgumentError.value(freshIndex, 'freshIndex');
+    final data = await _wbiJson(
+      '/x/web-interface/wbi/index/top/feed/rcmd',
+      {
+        'plat': '1',
+        'feed_version': 'CLIENT_SELECTED',
+        'ps': '10',
+        'fresh_idx': '$freshIndex',
+        'fresh_type': freshIndex == 1 && !loadMore
+            ? '0'
+            : (loadMore ? '4' : '3'),
+        'pc_wx_install': '0',
+        'pc_wx_gm_install': '0',
+      },
+      'selected',
+      context,
+    );
+    return _recommendedPage(data, freshIndex + 1);
+  }
+
   ApiPage<ApiVideoSummary> _recommendedPage(
     Map<String, Object?> data,
     int nextIndex,
