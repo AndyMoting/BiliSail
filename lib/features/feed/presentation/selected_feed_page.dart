@@ -1,20 +1,19 @@
-import 'package:bili_player/bili_player.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:webview_all/webview_all.dart';
 
 import '../../../domain/video.dart';
-import '../../playback/application/playback_session.dart';
-import '../../video/application/video_controller.dart';
 import '../application/selected_feed_controller.dart';
 
 /// Full-screen vertical "精选" flow.
 ///
-/// Mirrors the desktop client: one video per screen, ten per request, and the
-/// next page is requested while the user is still on the second to last item so
-/// the swipe never lands on a loading card. The visible tab owns one playback
-/// session, so only the centered item is opened; neighbours stay on their cover
-/// and take over the same session once they reach the center.
+/// Video playback is delegated to the real Bilibili video page inside a WebView:
+/// the page is loaded as usual and then reduced to its player with one injected
+/// style sheet, which keeps the official player, danmaku and account behaviour
+/// instead of reimplementing them on top of libmpv.
 class SelectedFeedPage extends ConsumerStatefulWidget {
   const SelectedFeedPage({super.key});
 
@@ -26,78 +25,14 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
   final _controller = PageController();
   int _index = 0;
 
-  /// Guards against a slow detail request reviving a page the user left.
-  int _activation = 0;
-
-  /// The item whose open request is in flight. Setting it before awaiting is
-  /// what stops every rebuild from starting another open and cancelling the
-  /// first one on a slow CDN.
-  String? _openingId;
-
-  /// The item currently playing behind the centered page.
-  String? _playingId;
-  PlaybackSession? _session;
-  bool _paused = false;
-
   @override
   void dispose() {
-    _activation++;
     _controller.dispose();
     super.dispose();
   }
 
-  PlaybackSession? _resolveSession() {
-    if (_session != null) return _session;
-    if (!ref.exists(playbackSessionProvider)) return null;
-    return _session = ref.read(playbackSessionProvider);
-  }
-
-  /// Opens the already resolved detail on the tab's single session.
-  Future<void> _open(VideoSummary item, VideoDetail detail) async {
-    final id = item.id.value;
-    if (_playingId == id || _openingId == id) return;
-    final session = _resolveSession();
-    if (session == null) return;
-    _openingId = id;
-    final activation = ++_activation;
-    try {
-      await session.open(
-        detail,
-        detail.parts.isEmpty ? null : detail.parts.first,
-        desiredPlaying: true,
-      );
-      if (!mounted || activation != _activation) return;
-      setState(() {
-        _playingId = id;
-        _openingId = null;
-        _paused = false;
-      });
-    } on Object {
-      if (!mounted || activation != _activation) return;
-      setState(() {
-        _playingId = null;
-        _openingId = null;
-      });
-    }
-  }
-
-  /// Tapping the video toggles playback in place; it no longer leaves the flow.
-  Future<void> _togglePlayback() async {
-    final session = _session;
-    if (session == null) return;
-    final next = !_paused;
-    setState(() => _paused = next);
-    if (next) {
-      await session.pause();
-    } else {
-      await session.play();
-    }
-  }
-
-  void _onPageChanged(int index, int itemCount, List<VideoSummary> items) {
+  void _onPageChanged(int index, int itemCount) {
     setState(() => _index = index);
-    // The centered page takes the session over; the previous one immediately
-    // falls back to its cover, matching the desktop handoff.
     if (index >= itemCount - 2) {
       ref.read(selectedFeedControllerProvider.notifier).loadMore();
     }
@@ -107,21 +42,6 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(selectedFeedControllerProvider);
     final items = state.items;
-    if (items.isNotEmpty) {
-      final centered = items[_index.clamp(0, items.length - 1)];
-      // Watching keeps the auto-dispose detail alive while this page is
-      // centered; opening from a post-frame callback avoids mutating playback
-      // during build.
-      final detail = ref.watch(videoDetailProvider(centered.id)).value;
-      if (detail != null &&
-          _playingId != centered.id.value &&
-          _openingId != centered.id.value) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _open(centered, detail);
-        });
-      }
-    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -135,20 +55,15 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
               controller: _controller,
               scrollDirection: Axis.vertical,
               itemCount: items.length,
-              onPageChanged: (index) =>
-                  _onPageChanged(index, items.length, items),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final playing = index == _index && _playingId == item.id.value;
-                return _SelectedFeedCard(
-                  item: item,
-                  index: index,
-                  active: index == _index,
-                  paused: index == _index && _paused,
-                  engine: playing ? _session?.engine : null,
-                  onTap: index == _index ? _togglePlayback : null,
-                );
-              },
+              onPageChanged: (index) => _onPageChanged(index, items.length),
+              itemBuilder: (context, index) => _SelectedFeedCard(
+                item: items[index],
+                index: index,
+                active: index == _index,
+                // Neighbouring players stay mounted so a swipe lands on a page
+                // that is already loading instead of a cold WebView.
+                attached: (index - _index).abs() <= 1,
+              ),
             ),
           Positioned(
             top: 12,
@@ -178,76 +93,52 @@ class _SelectedFeedCard extends StatelessWidget {
     required this.item,
     required this.index,
     required this.active,
-    this.paused = false,
-    this.engine,
-    this.onTap,
+    required this.attached,
   });
 
   final VideoSummary item;
   final int index;
   final bool active;
-  final bool paused;
-
-  /// Present only for the centered item whose media is already open.
-  final PlayerEngine? engine;
-
-  /// Toggles playback in place; a null handler keeps the card inert.
-  final Future<void> Function()? onTap;
+  final bool attached;
 
   @override
   Widget build(BuildContext context) {
     final cover = item.coverUrl.isEmpty ? null : item.coverUrl;
-    final playing = engine;
-    return GestureDetector(
+    return Stack(
       key: ValueKey('selected-feed-item-$index'),
-      onTap: onTap == null ? null : () => onTap!(),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(color: Colors.black),
-          if (cover != null && playing == null)
-            Image.network(
-              cover,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stack) => const SizedBox.shrink(),
-            ),
-          if (playing != null)
-            // The engine renders into a native texture; without the composition
-            // adapter the surface stays invisible even though audio plays.
-            ColoredBox(
-              color: Colors.black,
-              child: VideoCompositionScope.of(context).compose(
-                context,
-                layers: [
-                  VideoSurface(
-                    key: ValueKey('selected-surface-$index'),
-                    engine: playing,
-                  ),
-                ],
-              ),
-            ),
-          if (playing != null && paused)
-            const Center(
-              child: Icon(
-                Icons.play_arrow_rounded,
-                size: 76,
-                color: Colors.white70,
-              ),
-            ),
-          const DecoratedBox(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Colors.black),
+        // The cover stays underneath so a loading WebView never shows a hole.
+        if (cover != null)
+          Image.network(
+            cover,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+          ),
+        if (attached)
+          _SelectedWebPlayer(
+            key: ValueKey('selected-player-${item.id.value}'),
+            bvid: item.id.value,
+            active: active,
+          ),
+        const IgnorePointer(
+          child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [Colors.transparent, Colors.black87],
-                stops: [0.55, 1],
+                stops: [0.62, 1],
               ),
             ),
           ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 36,
+        ),
+        Positioned(
+          left: 24,
+          right: 24,
+          bottom: 30,
+          child: IgnorePointer(
             child: SafeArea(
               top: false,
               child: Column(
@@ -260,12 +151,12 @@ class _SelectedFeedCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 20,
+                      fontSize: 19,
                       fontWeight: FontWeight.w700,
                       height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Flexible(
@@ -294,61 +185,151 @@ class _SelectedFeedCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                      if (active) ...[
-                        const SizedBox(width: 12),
-                        const _LiveDot(),
-                      ],
                     ],
                   ),
-                  if (item.recommendationReason case final reason?
-                      when reason.trim().isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        reason,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
+
+/// Loads the real video page and shrinks it to its player.
+class _SelectedWebPlayer extends StatefulWidget {
+  const _SelectedWebPlayer({
+    super.key,
+    required this.bvid,
+    required this.active,
+  });
+
+  final String bvid;
+  final bool active;
+
+  @override
+  State<_SelectedWebPlayer> createState() => _SelectedWebPlayerState();
+}
+
+class _SelectedWebPlayerState extends State<_SelectedWebPlayer> {
+  WebViewSession? _session;
+  WebViewController? _controller;
+  WebViewWidget? _view;
+  bool _disposed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final session = await WebViewSession.create(
+        onPermissionRequest: (request) => request.deny(),
+      );
+      if (_disposed || session == null) {
+        await session?.close();
+        return;
+      }
+      _session = session;
+      final controller = session.controller;
+      _controller = controller;
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            unawaited(_decorate());
+          },
+        ),
+      );
+      await controller.loadRequest(
+        Uri.parse('https://www.bilibili.com/video/${widget.bvid}/'),
+      );
+      if (_disposed) return;
+      if (mounted) setState(() {});
+    } on Object {
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Injects the stylesheet that turns the video page into a bare player.
+  Future<void> _decorate() async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.evaluateJavascript(source: _kShrinkToPlayer);
+    await _syncPlayback();
+  }
+
+  Future<void> _syncPlayback() async {
+    final controller = _controller;
+    if (controller == null) return;
+    // The page autoplays on load; neighbours must not keep decoding audio once
+    // the user has moved on, so playback is re-asserted on every activation.
+    await controller.evaluateJavascript(
+      source: widget.active ? _kPlay : _kPause,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_SelectedWebPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) unawaited(_syncPlayback());
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    final session = _session;
+    _session = null;
+    _controller = null;
+    unawaited(session?.close() ?? Future<void>.value());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) return const SizedBox.shrink();
+    return NativeInputRegion(
+      child: _view ??= WebViewWidget(controller: controller),
+    );
+  }
+}
+
+const _kShrinkToPlayer = '''
+(function () {
+  var id = 'bs-selected-style';
+  if (document.getElementById(id)) return;
+  var style = document.createElement('style');
+  style.id = id;
+  style.textContent = [
+    'html,body{overflow:hidden!important;background:#000!important}',
+    'body *{visibility:hidden!important}',
+    '#bilibili-player,#bilibili-player *{visibility:visible!important}',
+    '#bilibili-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;margin:0!important;z-index:2147483646!important}',
+    '#bilibili-player .bpx-player-container,#bilibili-player .bpx-player-primary-area{width:100%!important;height:100%!important}',
+    '#bilibili-player .bpx-player-container{box-shadow:none!important}',
+    '#bilibili-player .bpx-player-video-area{height:100%!important}',
+    '.bpx-player-ending-panel,.bpx-player-ending-wrap,.bpx-player-toast-auto{display:none!important}'
+  ].join('');
+  document.head.appendChild(style);
+})();
+''';
+
+const _kPlay =
+    "(function(){var v=document.querySelector('#bilibili-player video,video');"
+    'if(!v)return;var p=v.play();if(p&&p.catch)p.catch(function(){});})();';
+
+const _kPause =
+    "(function(){var v=document.querySelector('#bilibili-player video,video');"
+    'if(!v)return;v.pause();})();';
 
 String _formatCount(int count) {
   if (count < 10000) return '$count';
   final value = count / 10000;
   return '${value.toStringAsFixed(value >= 10 ? 0 : 1)}万';
-}
-
-class _LiveDot extends StatelessWidget {
-  const _LiveDot();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 6,
-    height: 6,
-    decoration: const BoxDecoration(
-      color: Color(0xFFFB7299),
-      shape: BoxShape.circle,
-    ),
-  );
 }
 
 class _RoundIconButton extends StatelessWidget {
