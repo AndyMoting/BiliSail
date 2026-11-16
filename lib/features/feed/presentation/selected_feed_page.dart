@@ -28,11 +28,16 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
 
   /// Guards against a slow detail request reviving a page the user left.
   int _activation = 0;
-  bool _activating = false;
 
-  /// The item currently loading or playing behind the centered page.
+  /// The item whose open request is in flight. Setting it before awaiting is
+  /// what stops every rebuild from starting another open and cancelling the
+  /// first one on a slow CDN.
+  String? _openingId;
+
+  /// The item currently playing behind the centered page.
   String? _playingId;
   PlaybackSession? _session;
+  bool _paused = false;
 
   @override
   void dispose() {
@@ -49,10 +54,11 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
 
   /// Opens the already resolved detail on the tab's single session.
   Future<void> _open(VideoSummary item, VideoDetail detail) async {
-    if (_playingId == item.id.value) return;
+    final id = item.id.value;
+    if (_playingId == id || _openingId == id) return;
     final session = _resolveSession();
-    if (session == null || _activating) return;
-    _activating = true;
+    if (session == null) return;
+    _openingId = id;
     final activation = ++_activation;
     try {
       await session.open(
@@ -61,12 +67,30 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
         desiredPlaying: true,
       );
       if (!mounted || activation != _activation) return;
-      setState(() => _playingId = item.id.value);
+      setState(() {
+        _playingId = id;
+        _openingId = null;
+        _paused = false;
+      });
     } on Object {
       if (!mounted || activation != _activation) return;
-      setState(() => _playingId = null);
-    } finally {
-      _activating = false;
+      setState(() {
+        _playingId = null;
+        _openingId = null;
+      });
+    }
+  }
+
+  /// Tapping the video toggles playback in place; it no longer leaves the flow.
+  Future<void> _togglePlayback() async {
+    final session = _session;
+    if (session == null) return;
+    final next = !_paused;
+    setState(() => _paused = next);
+    if (next) {
+      await session.pause();
+    } else {
+      await session.play();
     }
   }
 
@@ -89,7 +113,9 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
       // centered; opening from a post-frame callback avoids mutating playback
       // during build.
       final detail = ref.watch(videoDetailProvider(centered.id)).value;
-      if (detail != null && _playingId != centered.id.value) {
+      if (detail != null &&
+          _playingId != centered.id.value &&
+          _openingId != centered.id.value) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _open(centered, detail);
@@ -118,8 +144,9 @@ class _SelectedFeedPageState extends ConsumerState<SelectedFeedPage> {
                   item: item,
                   index: index,
                   active: index == _index,
+                  paused: index == _index && _paused,
                   engine: playing ? _session?.engine : null,
-                  onOpen: () => context.go('/video/${item.id.value}'),
+                  onTap: index == _index ? _togglePlayback : null,
                 );
               },
             ),
@@ -151,17 +178,21 @@ class _SelectedFeedCard extends StatelessWidget {
     required this.item,
     required this.index,
     required this.active,
-    required this.onOpen,
+    this.paused = false,
     this.engine,
+    this.onTap,
   });
 
   final VideoSummary item;
   final int index;
   final bool active;
+  final bool paused;
 
   /// Present only for the centered item whose media is already open.
   final PlayerEngine? engine;
-  final VoidCallback onOpen;
+
+  /// Toggles playback in place; a null handler keeps the card inert.
+  final Future<void> Function()? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +200,7 @@ class _SelectedFeedCard extends StatelessWidget {
     final playing = engine;
     return GestureDetector(
       key: ValueKey('selected-feed-item-$index'),
-      onTap: onOpen,
+      onTap: onTap == null ? null : () => onTap!(),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -183,7 +214,8 @@ class _SelectedFeedCard extends StatelessWidget {
           if (playing != null)
             // The engine renders into a native texture; without the composition
             // adapter the surface stays invisible even though audio plays.
-            Positioned.fill(
+            ColoredBox(
+              color: Colors.black,
               child: VideoCompositionScope.of(context).compose(
                 context,
                 layers: [
@@ -192,6 +224,14 @@ class _SelectedFeedCard extends StatelessWidget {
                     engine: playing,
                   ),
                 ],
+              ),
+            ),
+          if (playing != null && paused)
+            const Center(
+              child: Icon(
+                Icons.play_arrow_rounded,
+                size: 76,
+                color: Colors.white70,
               ),
             ),
           const DecoratedBox(
